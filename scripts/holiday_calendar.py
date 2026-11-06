@@ -271,6 +271,8 @@ def without_identity(dataset):
     for field in ("holidays", "workdays"):
         for event in result[field]:
             event.pop("uid", None)
+            event.pop("sequence", None)
+            event.pop("updated_at", None)
     return result
 
 
@@ -283,6 +285,13 @@ def load_years(root):
         parsed = parse_notice(source_text, dataset["source"]["url"])
         require(without_identity(dataset) == parsed, f"Saved year {dataset['year']} disagrees with archived official evidence")
         datetime.strptime(dataset["created_at"], "%Y%m%dT%H%M%SZ")
+        for field in ("holidays", "workdays"):
+            for event in dataset[field]:
+                sequence = event.get("sequence", 0)
+                require(type(sequence) is int and sequence >= 0, "Invalid event revision sequence")
+                if "updated_at" in event:
+                    datetime.strptime(event["updated_at"], "%Y%m%dT%H%M%SZ")
+                    require(event["updated_at"] >= dataset["created_at"], "Event revision predates its creation")
         datasets.append(dataset)
     require(bool(datasets), "No validated annual datasets exist")
     return datasets
@@ -315,9 +324,9 @@ def render_calendar(datasets, kind="all"):
             for event in dataset[field]:
                 start = date.fromisoformat(event.get("start", event.get("date")))
                 end = date.fromisoformat(event.get("end", event.get("date"))) + timedelta(days=1)
-                summary = event["name"] + "（放假）" if event_kind == "holiday" else "补班：" + event["name"] + "补班"
+                summary = event["name"] + "（放假）" if event_kind == "holiday" else "班"
                 description = f"{dataset['source']['title']}；{dataset['source']['document_number']}。" + ("调休上班日。" if event_kind == "workday" else "此区间包含正式通知安排的连续假期。")
-                all_events.append((start, event["uid"], ["BEGIN:VEVENT", "UID:" + event["uid"], "DTSTAMP:" + dataset["created_at"], "DTSTART;VALUE=DATE:" + start.strftime("%Y%m%d"), "DTEND;VALUE=DATE:" + end.strftime("%Y%m%d"), "SUMMARY:" + escape_text(summary), "DESCRIPTION:" + escape_text(description), "URL:" + dataset["source"]["url"], "CATEGORIES:" + ("放假" if event_kind == "holiday" else "调休补班"), "STATUS:CONFIRMED", "SEQUENCE:0", "TRANSP:TRANSPARENT", "END:VEVENT"]))
+                all_events.append((start, event["uid"], ["BEGIN:VEVENT", "UID:" + event["uid"], "DTSTAMP:" + event.get("updated_at", dataset["created_at"]), "DTSTART;VALUE=DATE:" + start.strftime("%Y%m%d"), "DTEND;VALUE=DATE:" + end.strftime("%Y%m%d"), "SUMMARY:" + escape_text(summary), "DESCRIPTION:" + escape_text(description), "URL:" + dataset["source"]["url"], "CATEGORIES:" + ("放假" if event_kind == "holiday" else "调休补班"), "STATUS:CONFIRMED", "SEQUENCE:" + str(event.get("sequence", 0)), "TRANSP:TRANSPARENT", "END:VEVENT"]))
     for _, _, event_lines in sorted(all_events):
         lines.extend(event_lines)
     lines.append("END:VCALENDAR")

@@ -56,27 +56,37 @@
     {
       "name": "春节",
       "date": "2027-01-31",
-      "uid": "bc4aa134-b0f9-52e1-add5-ed9c3ec9b723@openai"
+      "uid": "bc4aa134-b0f9-52e1-add5-ed9c3ec9b723@openai",
+      "sequence": 1,
+      "updated_at": "20261106T070046Z"
     },
     {
       "name": "春节",
       "date": "2027-02-14",
-      "uid": "91a1c0e2-aef3-57a0-8944-92abef5e2146@openai"
+      "uid": "91a1c0e2-aef3-57a0-8944-92abef5e2146@openai",
+      "sequence": 1,
+      "updated_at": "20261106T070046Z"
     },
     {
       "name": "劳动节",
       "date": "2027-05-08",
-      "uid": "128b4c40-2287-5c00-80f4-bf125f273e02@openai"
+      "uid": "128b4c40-2287-5c00-80f4-bf125f273e02@openai",
+      "sequence": 1,
+      "updated_at": "20261106T070046Z"
     },
     {
       "name": "国庆节",
       "date": "2027-09-26",
-      "uid": "5b02c04c-e3a4-5b27-8d02-2c6dfaf7a5ae@openai"
+      "uid": "5b02c04c-e3a4-5b27-8d02-2c6dfaf7a5ae@openai",
+      "sequence": 1,
+      "updated_at": "20261106T070046Z"
     },
     {
       "name": "国庆节",
       "date": "2027-10-09",
-      "uid": "03abf216-0673-5691-9677-a8edd3b892b0@openai"
+      "uid": "03abf216-0673-5691-9677-a8edd3b892b0@openai",
+      "sequence": 1,
+      "updated_at": "20261106T070046Z"
     }
   ],
   "created_at": "20261106T000000Z"

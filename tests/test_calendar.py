@@ -38,7 +38,7 @@ class CalendarTests(unittest.TestCase):
             self.assertFalse(e.errors)
         for e in current_year:
             day, end = e.decoded('DTSTART'), e.decoded('DTEND')
-            target = workdays if str(e['SUMMARY']).startswith('补班：') else holidays
+            target = workdays if str(e['SUMMARY']) == '班' else holidays
             while day < end:
                 target.add(day.isoformat())
                 day += timedelta(days=1)
@@ -81,7 +81,7 @@ class CalendarTests(unittest.TestCase):
         self.assertEqual('中国大陆放假日历', str(parsed['holidays.ics']['X-WR-CALNAME']))
         self.assertEqual('中国大陆调休补班', str(parsed['workdays.ics']['X-WR-CALNAME']))
         self.assertTrue(all(str(e['SUMMARY']).endswith('（放假）') for e in events['holidays.ics'].values()))
-        self.assertTrue(all(str(e['SUMMARY']).startswith('补班：') for e in events['workdays.ics'].values()))
+        self.assertTrue(all(str(e['SUMMARY']) == '班' for e in events['workdays.ics'].values()))
         self.assertEqual(7, sum(e.decoded('DTSTART').year == 2027 for e in events['holidays.ics'].values()))
         self.assertEqual(5, sum(e.decoded('DTSTART').year == 2027 for e in events['workdays.ics'].values()))
 
@@ -113,6 +113,20 @@ class CalendarTests(unittest.TestCase):
         parsed = h.parse_notice(NOTICE, SOURCE)
         a, b = h.add_identity(parsed), h.add_identity(parsed)
         self.assertEqual([e['uid'] for e in a['holidays']], [e['uid'] for e in b['holidays']])
+
+    def test_short_workday_titles_and_revision_metadata(self):
+        datasets = h.load_years(ROOT)
+        expected = {event['uid']: (event.get('sequence', 0), event.get('updated_at', dataset['created_at'])) for dataset in datasets for event in dataset['workdays']}
+        events = Calendar.from_ical(h.render_calendar(datasets, 'workday')).walk('VEVENT')
+        for event in events:
+            self.assertEqual('班', str(event['SUMMARY']))
+            sequence, stamp = expected[str(event['UID'])]
+            self.assertEqual(sequence, int(event['SEQUENCE']))
+            self.assertEqual(stamp, event['DTSTAMP'].to_ical().decode())
+        fresh = h.add_identity(h.parse_notice(NOTICE, SOURCE))
+        for event in Calendar.from_ical(h.render_calendar([fresh], 'workday')).walk('VEVENT'):
+            self.assertEqual('班', str(event['SUMMARY']))
+            self.assertEqual(0, int(event['SEQUENCE']))
 
     def test_invalid_notice_data_rejected(self):
         for text in (NOTICE.replace('共9天','共8天'), NOTICE.replace('1月1日（周五）','1月1日（周四）'), re.sub(r'六、中秋节：[^\n]*\n','',NOTICE), NOTICE.replace('国办发明电〔2026〕10号',''), NOTICE.replace('国务院办公厅关于2027年','网友预测2027年'), NOTICE.replace('2026年11月5日','2029年11月5日'), NOTICE.replace('1月31日（周日）、2月14日（周日）上班','1月31日（周日）至2月14日（周日）上班')):

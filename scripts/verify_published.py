@@ -10,7 +10,7 @@ import sys
 import time
 from urllib.request import Request, urlopen
 
-from holiday_calendar import ROOT, InvalidData, load_years, require, validate_ics
+from holiday_calendar import ROOT, FEEDS, load_years, require, validate_ics
 
 
 def github(path):
@@ -46,11 +46,15 @@ def verify(repository, commit, root):
     site = f"https://{owner}.github.io/china-holiday/"
     require(pages["html_url"].rstrip("/").lower() == site.rstrip("/").lower(), "Pages URL differs from the required fixed subscription host/path")
     public_get(site)
-    url = site + "holiday.ics"
-    raw = public_get(url)
-    events = validate_ics(raw, load_years(root))
-    require(raw == (root / "holiday.ics").read_bytes(), "Published ICS is stale or differs from validated repository content")
-    return {"repository": repo["html_url"], "public": True, "website": site, "subscription": url, "http_status": 200, "format": "VCALENDAR 2.0", "events": len(events), "sha256": hashlib.sha256(raw).hexdigest(), "pages_commit": build["commit"]}
+    datasets = load_years(root)
+    feeds = {}
+    for name, (kind, _) in FEEDS.items():
+        url = site + name
+        raw = public_get(url)
+        events = validate_ics(raw, datasets, kind)
+        require(raw == (root / name).read_bytes(), f"Published {name} is stale or differs from validated repository content")
+        feeds[name] = {"url": url, "http_status": 200, "events": len(events), "sha256": hashlib.sha256(raw).hexdigest()}
+    return {"repository": repo["html_url"], "public": True, "website": site, "subscription": site + "holiday.ics", "format": "VCALENDAR 2.0", "feeds": feeds, "pages_commit": build["commit"]}
 
 
 def main():

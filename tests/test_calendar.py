@@ -67,6 +67,48 @@ class CalendarTests(unittest.TestCase):
         self.assertIn('\\,', line)
         self.assertIn('\\n', line)
 
+    def test_split_feeds_are_complete_disjoint_and_preserve_event_identity(self):
+        parsed = {name: Calendar.from_ical((ROOT / name).read_bytes()) for name in h.FEEDS}
+        events = {name: {str(e['UID']): e for e in cal.walk('VEVENT')} for name, cal in parsed.items()}
+        all_ids = set(events['holiday.ics'])
+        holidays, workdays = set(events['holidays.ics']), set(events['workdays.ics'])
+        self.assertFalse(holidays & workdays)
+        self.assertEqual(all_ids, holidays | workdays)
+        for name in ('holidays.ics', 'workdays.ics'):
+            for uid, event in events[name].items():
+                self.assertFalse(event.errors)
+                self.assertEqual(events['holiday.ics'][uid].to_ical(), event.to_ical())
+        self.assertEqual('中国大陆放假日历', str(parsed['holidays.ics']['X-WR-CALNAME']))
+        self.assertEqual('中国大陆调休补班', str(parsed['workdays.ics']['X-WR-CALNAME']))
+        self.assertTrue(all(str(e['SUMMARY']).endswith('（放假）') for e in events['holidays.ics'].values()))
+        self.assertTrue(all(str(e['SUMMARY']).startswith('补班：') for e in events['workdays.ics'].values()))
+        self.assertEqual(7, sum(e.decoded('DTSTART').year == 2027 for e in events['holidays.ics'].values()))
+        self.assertEqual(5, sum(e.decoded('DTSTART').year == 2027 for e in events['workdays.ics'].values()))
+
+    def test_migration_and_repeated_generation_preserve_merged_calendar(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'repo'
+            shutil.copytree(ROOT, root, ignore=shutil.ignore_patterns('__pycache__', '.git'))
+            before = (root / 'holiday.ics').read_bytes()
+            (root / 'holidays.ics').unlink()
+            (root / 'workdays.ics').unlink()
+            data = h.load_years(root)
+            h.validate_calendars(root, data, require_all=False)
+            self.assertTrue(h.write_calendars(root, h.render_feeds(data)))
+            self.assertEqual(before, (root / 'holiday.ics').read_bytes())
+            self.assertEqual({'holiday.ics': 12, 'holidays.ics': 7, 'workdays.ics': 5}, h.validate_calendars(root, data))
+            self.assertFalse(h.write_calendars(root, h.render_feeds(data)))
+
+    def test_invalid_split_feed_blocks_update_without_overwriting_other_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'repo'
+            shutil.copytree(ROOT, root, ignore=shutil.ignore_patterns('__pycache__', '.git'))
+            (root / 'workdays.ics').write_bytes((root / 'holidays.ics').read_bytes())
+            before = snapshot(root)
+            with self.assertRaises(h.InvalidData):
+                h.update(root, [SOURCE], fetcher=lambda _: as_html(NOTICE))
+            self.assertEqual(before, snapshot(root))
+
     def test_uid_determinism(self):
         parsed = h.parse_notice(NOTICE, SOURCE)
         a, b = h.add_identity(parsed), h.add_identity(parsed)
@@ -143,6 +185,13 @@ class CalendarTests(unittest.TestCase):
             result=(root/'holiday.ics').read_bytes()
             self.assertTrue(old_uids <= {e['UID'] for e in h.validate_ics(result)})
             self.assertEqual([2026,2027],[item['year'] for item in h.load_years(root)])
+            split_ids = set()
+            for name, (kind, _) in h.FEEDS.items():
+                if kind != 'all':
+                    selected = {e['UID'] for e in h.validate_ics((root / name).read_bytes(), h.load_years(root), kind)}
+                    self.assertFalse(split_ids & selected)
+                    split_ids |= selected
+            self.assertEqual({e['UID'] for e in h.validate_ics(result)}, split_ids)
             self.assertFalse(h.update(root,[SOURCE],fetcher=lambda _:as_html(NOTICE)))
             self.assertEqual(result,(root/'holiday.ics').read_bytes())
 

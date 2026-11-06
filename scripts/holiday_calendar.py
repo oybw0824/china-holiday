@@ -21,6 +21,11 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 FIRST_YEAR = 2027
+FEEDS = {
+    "holiday.ics": ("all", "中国大陆节假日及调休"),
+    "holidays.ics": ("holiday", "中国大陆放假日历"),
+    "workdays.ics": ("workday", "中国大陆调休补班"),
+}
 HOLIDAY_NAMES = {"元旦", "春节", "清明节", "劳动节", "端午节", "中秋节", "国庆节"}
 SEARCH_ENDPOINT = "https://sousuo.www.gov.cn/search-gov/data"
 ARTICLE_PATH = re.compile(r"^/zhengce/(?:content|zhengceku)/\d{4}(?:-?\d{2}(?:/\d{2})?)/content_\d+\.htm$")
@@ -298,26 +303,31 @@ def fold_line(line):
     return "\r\n".join(chunks)
 
 
-def render_calendar(datasets):
-    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//China Holiday Calendar//Official Mainland China Holidays//ZH", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:中国大陆节假日及调休", "X-WR-TIMEZONE:Asia/Shanghai", "REFRESH-INTERVAL;VALUE=DURATION:P7D", "X-PUBLISHED-TTL:P7D"]
+def render_calendar(datasets, kind="all"):
+    names = {value[0]: value[1] for value in FEEDS.values()}
+    require(kind in names, "Unknown calendar feed kind")
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//China Holiday Calendar//Official Mainland China Holidays//ZH", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:" + names[kind], "X-WR-TIMEZONE:Asia/Shanghai", "REFRESH-INTERVAL;VALUE=DURATION:P7D", "X-PUBLISHED-TTL:P7D"]
     all_events = []
     for dataset in datasets:
-        for kind, field in (("holiday", "holidays"), ("workday", "workdays")):
+        for event_kind, field in (("holiday", "holidays"), ("workday", "workdays")):
+            if kind != "all" and kind != event_kind:
+                continue
             for event in dataset[field]:
                 start = date.fromisoformat(event.get("start", event.get("date")))
                 end = date.fromisoformat(event.get("end", event.get("date"))) + timedelta(days=1)
-                summary = event["name"] + "（放假）" if kind == "holiday" else "补班：" + event["name"] + "补班"
-                description = f"{dataset['source']['title']}；{dataset['source']['document_number']}。" + ("调休上班日。" if kind == "workday" else "此区间包含正式通知安排的连续假期。")
-                all_events.append((start, event["uid"], ["BEGIN:VEVENT", "UID:" + event["uid"], "DTSTAMP:" + dataset["created_at"], "DTSTART;VALUE=DATE:" + start.strftime("%Y%m%d"), "DTEND;VALUE=DATE:" + end.strftime("%Y%m%d"), "SUMMARY:" + escape_text(summary), "DESCRIPTION:" + escape_text(description), "URL:" + dataset["source"]["url"], "CATEGORIES:" + ("放假" if kind == "holiday" else "调休补班"), "STATUS:CONFIRMED", "SEQUENCE:0", "TRANSP:TRANSPARENT", "END:VEVENT"]))
+                summary = event["name"] + "（放假）" if event_kind == "holiday" else "补班：" + event["name"] + "补班"
+                description = f"{dataset['source']['title']}；{dataset['source']['document_number']}。" + ("调休上班日。" if event_kind == "workday" else "此区间包含正式通知安排的连续假期。")
+                all_events.append((start, event["uid"], ["BEGIN:VEVENT", "UID:" + event["uid"], "DTSTAMP:" + dataset["created_at"], "DTSTART;VALUE=DATE:" + start.strftime("%Y%m%d"), "DTEND;VALUE=DATE:" + end.strftime("%Y%m%d"), "SUMMARY:" + escape_text(summary), "DESCRIPTION:" + escape_text(description), "URL:" + dataset["source"]["url"], "CATEGORIES:" + ("放假" if event_kind == "holiday" else "调休补班"), "STATUS:CONFIRMED", "SEQUENCE:0", "TRANSP:TRANSPARENT", "END:VEVENT"]))
     for _, _, event_lines in sorted(all_events):
         lines.extend(event_lines)
     lines.append("END:VCALENDAR")
     output = ("\r\n".join(fold_line(line) for line in lines) + "\r\n").encode("utf-8")
-    validate_ics(output, datasets)
+    validate_ics(output, datasets, kind)
     return output
 
 
-def validate_ics(raw, datasets=None):
+def validate_ics(raw, datasets=None, kind="all"):
+    require(kind in {"all", "holiday", "workday"}, "Unknown calendar feed kind")
     require(raw.startswith(b"BEGIN:VCALENDAR\r\n") and raw.endswith(b"END:VCALENDAR\r\n"), "Invalid VCALENDAR boundaries")
     require(b"\n" not in raw.replace(b"\r\n", b"") and b"\r" not in raw.replace(b"\r\n", b""), "ICS requires CRLF line endings")
     require(all(len(line) <= 75 for line in raw.split(b"\r\n")), "ICS line is longer than 75 octets")
@@ -357,6 +367,8 @@ def validate_ics(raw, datasets=None):
         expected = {}
         for dataset in datasets:
             for field in ("holidays", "workdays"):
+                if kind == "holiday" and field != "holidays" or kind == "workday" and field != "workdays":
+                    continue
                 for event in dataset[field]:
                     uid = event["uid"]
                     require(uid not in expected, "UID collision in annual history")
@@ -366,6 +378,32 @@ def validate_ics(raw, datasets=None):
             actual = tuple(datetime.strptime(event[key], "%Y%m%d").date() for key in ("DTSTART;VALUE=DATE", "DTEND;VALUE=DATE"))
             require(actual == expected[event["UID"]], "ICS dates disagree with validated annual data")
     return events
+
+
+def render_feeds(datasets):
+    return {name: render_calendar(datasets, kind) for name, (kind, _) in FEEDS.items()}
+
+
+def validate_calendars(root, datasets, require_all=True):
+    counts = {}
+    for name, (kind, _) in FEEDS.items():
+        path = root / name
+        if not path.exists() and not require_all and name != "holiday.ics":
+            continue
+        raw = path.read_bytes()
+        counts[name] = len(validate_ics(raw, datasets, kind))
+        require(raw == render_calendar(datasets, kind), f"{name} is not the deterministic rendering of the validated history")
+    return counts
+
+
+def write_calendars(root, outputs):
+    changed = False
+    for name, raw in outputs.items():
+        path = root / name
+        if not path.exists() or path.read_bytes() != raw:
+            atomic_write(path, raw)
+            changed = True
+    return changed
 
 
 def atomic_write(path, contents):
@@ -398,7 +436,7 @@ def record_check(root, years, added):
 def update(root, urls=None, fetcher=fetch):
     existing = load_years(root)
     current = (root / "holiday.ics").read_bytes()
-    validate_ics(current, existing)
+    validate_calendars(root, existing, require_all=False)
     years = {data["year"]: data for data in existing}
     staged = {}
     # Fetch and validate everything before writing any repository file.
@@ -420,11 +458,13 @@ def update(root, urls=None, fetcher=fetch):
         staged[root / f"data/years/{year}.json"] = (json.dumps(dataset, ensure_ascii=False, indent=2) + "\n").encode()
         staged[root / f"data/sources/{year}.txt"] = text.encode()
     if not staged:
+        changed = write_calendars(root, render_feeds(existing))
         record_check(root, years, [])
         print("No new formally announced year. Existing calendar preserved byte for byte.")
-        return False
+        return changed
     datasets = [years[year] for year in sorted(years)]
-    new_calendar = render_calendar(datasets)
+    outputs = render_feeds(datasets)
+    new_calendar = outputs["holiday.ics"]
     previous_uids = {e["UID"] for e in validate_ics(current)}
     require(previous_uids <= {e["UID"] for e in validate_ics(new_calendar)}, "An update would remove historical UIDs")
     new_years = sorted(set(years) - {item["year"] for item in existing})
@@ -435,7 +475,7 @@ def update(root, urls=None, fetcher=fetch):
     # Calendar is installed last, after all parsing, evidence and UID checks pass.
     for path, data in staged.items():
         atomic_write(path, data)
-    atomic_write(root / "holiday.ics", new_calendar)
+    write_calendars(root, outputs)
     record_check(root, years, new_years)
     print("Added official years: " + ", ".join(map(str, new_years)))
     return True
@@ -443,19 +483,22 @@ def update(root, urls=None, fetcher=fetch):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["update", "validate"])
+    parser.add_argument("command", choices=["update", "validate", "generate"])
     parser.add_argument("--source-url", help="Optional exact www.gov.cn original-notice URL; never a third-party calendar")
     parser.add_argument("--root", type=Path, default=ROOT)
     args = parser.parse_args()
     try:
         if args.command == "update":
             update(args.root, [args.source_url] if args.source_url else None)
+        elif args.command == "generate":
+            datasets = load_years(args.root)
+            validate_calendars(args.root, datasets, require_all=False)
+            write_calendars(args.root, render_feeds(datasets))
+            print("Generated merged, holidays-only and make-up-workdays-only feeds from validated official history.")
         else:
             datasets = load_years(args.root)
-            raw = (args.root / "holiday.ics").read_bytes()
-            events = validate_ics(raw, datasets)
-            require(raw == render_calendar(datasets), "Calendar is not the deterministic rendering of the validated history")
-            print(f"PASS: years={[d['year'] for d in datasets]}, events={len(events)}, unique_uids={len(events)}")
+            counts = validate_calendars(args.root, datasets)
+            print(f"PASS: years={[d['year'] for d in datasets]}, feeds={counts}")
     except (InvalidData, OSError, ValueError, KeyError, TypeError) as exc:
         print(f"FAILED: {exc}. Existing published calendar must not be overwritten.", file=sys.stderr)
         return 1

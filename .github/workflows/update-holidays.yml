@@ -1,0 +1,85 @@
+name: Update official holidays
+
+on:
+  schedule:
+    # Monday 09:23 Asia/Shanghai (GitHub cron uses UTC).
+    - cron: '23 1 * * 1'
+  workflow_dispatch:
+    inputs:
+      source_url:
+        description: '可选：中国政府网正式年度公告原文 HTTPS URL；留空自动检索'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: official-holiday-maintenance
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          fetch-depth: 1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - name: Install independent ICS validator
+        run: python -m pip install -r requirements-dev.txt
+      - name: Test parser and validate current published history
+        run: |
+          python -m unittest discover -s tests -v
+          python scripts/holiday_calendar.py validate
+      - name: Discover, parse and validate official announcements
+        env:
+          SOURCE_URL: ${{ inputs.source_url }}
+        run: |
+          if [ -n "$SOURCE_URL" ]; then
+            python scripts/holiday_calendar.py update --source-url "$SOURCE_URL"
+          else
+            python scripts/holiday_calendar.py update
+          fi
+          python scripts/holiday_calendar.py validate
+          python -m unittest discover -s tests -v
+      - name: Commit validated update and check record
+        id: commit
+        run: |
+          if git diff --quiet -- holiday.ics; then
+            echo 'calendar_changed=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'calendar_changed=true' >> "$GITHUB_OUTPUT"
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add holiday.ics data/years data/sources data/check-status.json CHANGELOG.md CHECKS.md
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore: check official holiday notices and preserve calendar history'
+            # A concurrent human push rejects safely; never force-push or overwrite it.
+            git push origin HEAD:main
+          fi
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Request branch-based Pages build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds" --silent
+      - name: Verify public HTTPS calendar after deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT: ${{ steps.commit.outputs.commit }}
+        run: python scripts/verify_published.py --repository "$GITHUB_REPOSITORY" --expected-commit "$EXPECTED_COMMIT" --wait-seconds 420
+      - name: Summarize maintenance
+        if: always()
+        run: |
+          echo '固定订阅路径：/china-holiday/holiday.ics' >> "$GITHUB_STEP_SUMMARY"
+          echo '日历更新只有在正式原文、年度数据和 ICS 校验全部通过后才提交。' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f data/check-status.json ]; then
+            cat data/check-status.json >> "$GITHUB_STEP_SUMMARY"
+          fi

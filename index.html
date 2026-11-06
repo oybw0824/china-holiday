@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="以国务院正式公告为依据，持续维护的中国大陆节假日与调休补班 Apple 日历订阅。">
+  <title>中国大陆节假日长期订阅</title>
+  <style>
+    :root{color-scheme:light dark;font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif}
+    body{max-width:720px;margin:64px auto;padding:0 24px;line-height:1.8}
+    h1{font-size:clamp(1.7rem,5vw,2.3rem);line-height:1.35}
+    .label{font-size:.85rem;letter-spacing:.14em;color:#16805b}
+    .card{padding:24px;border:1px solid #85858555;border-radius:16px;margin:28px 0}
+    code{display:block;overflow-wrap:anywhere;white-space:normal;margin:12px 0}
+    button{font:inherit;padding:9px 18px;border:0;border-radius:8px;background:#147555;color:white;cursor:pointer}
+    button:focus-visible,a:focus-visible{outline:3px solid #5b9fe8;outline-offset:4px}
+    a{color:#16805b}small{opacity:.75}#copy-status{margin-left:12px}
+    @media(prefers-color-scheme:dark){a,.label{color:#68d9b3}}
+  </style>
+</head>
+<body>
+  <p class="label">固定地址 · 持续更新</p>
+  <h1>中国大陆节假日<br>长期订阅日历</h1>
+  <p>一次订阅，持续接收已正式公布的节假日及调休补班安排。</p>
+  <section class="card" aria-labelledby="subscribe-heading">
+    <h2 id="subscribe-heading">Apple 日历订阅地址</h2>
+    <code id="subscription">请使用本站 HTTPS 地址下的 holiday.ics</code>
+    <button id="copy" type="button">复制订阅地址</button><span id="copy-status" role="status"></span>
+    <p>在 Apple 日历中选择“添加订阅日历”，粘贴上方 HTTPS 地址。<a href="./holiday.ics">下载 ICS 文件</a>用于一次性导入。</p>
+  </section>
+  <p id="coverage">当前年度及最近检查记录加载中。</p>
+  <p>每周检查国务院办公厅正式年度公告。未公布的年份不生成预测数据，已发布年度保留在同一个订阅文件中。</p>
+  <p><a href="https://www.gov.cn/zhengce/content/202611/content_7085101.htm" rel="noreferrer">2027 年官方公告</a> · <a href="./CHANGELOG.md">更新日志</a> · <a href="./CHECKS.md">检查记录</a></p>
+  <small>日历按正式通知标注连续假期及补班安排，具体考勤请结合所在单位要求。客户端可能需要一段时间刷新订阅。</small>
+  <script>
+    const url = new URL('./holiday.ics', location.href).href;
+    document.getElementById('subscription').textContent = url;
+    document.getElementById('copy').addEventListener('click', async () => {
+      const status = document.getElementById('copy-status');
+      try { await navigator.clipboard.writeText(url); status.textContent = '已复制'; }
+      catch { status.textContent = '请选中上方地址复制'; }
+    });
+    fetch('./data/check-status.json', {cache:'no-cache'}).then(response => {
+      if (!response.ok) throw new Error('status unavailable');
+      return response.json();
+    }).then(data => {
+      const checked = new Intl.DateTimeFormat('zh-CN', {dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Shanghai'}).format(new Date(data.checked_at));
+      document.getElementById('coverage').textContent = `已收录年度：${data.available_years.join('、')}。最近成功检查：${checked}（北京时间）。`;
+    }).catch(() => {document.getElementById('coverage').textContent = '年度范围及更新情况请查看检查记录。';});
+  </script>
+</body>
+</html>

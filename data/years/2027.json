@@ -1,0 +1,83 @@
+{
+  "year": 2027,
+  "source": {
+    "url": "https://www.gov.cn/zhengce/content/202611/content_7085101.htm",
+    "title": "国务院办公厅关于2027年部分节假日安排的通知",
+    "issuer": "国务院办公厅",
+    "document_number": "国办发明电〔2026〕10号",
+    "published_on": "2026-11-05",
+    "sha256": "d8cc758cb7214322e4353b81768e1daf9e0cb9f59476ba0b9c28fa4e9af556b9"
+  },
+  "holidays": [
+    {
+      "name": "元旦",
+      "start": "2027-01-01",
+      "end": "2027-01-03",
+      "uid": "d227fba1-d0d2-5817-9e49-3bcc4920a023@openai"
+    },
+    {
+      "name": "春节",
+      "start": "2027-02-05",
+      "end": "2027-02-13",
+      "uid": "2666e864-f601-587d-98fd-8e356f0ef4cb@openai"
+    },
+    {
+      "name": "清明节",
+      "start": "2027-04-03",
+      "end": "2027-04-05",
+      "uid": "a627dfa8-1e38-5e81-a7f9-cf6d1686cd50@openai"
+    },
+    {
+      "name": "劳动节",
+      "start": "2027-05-01",
+      "end": "2027-05-05",
+      "uid": "cfa350e4-6015-5717-a646-ed4670f390f3@openai"
+    },
+    {
+      "name": "端午节",
+      "start": "2027-06-09",
+      "end": "2027-06-09",
+      "uid": "c858eade-7498-5282-9029-e54404897b9a@openai"
+    },
+    {
+      "name": "中秋节",
+      "start": "2027-09-15",
+      "end": "2027-09-15",
+      "uid": "54fa1d0e-41a7-59df-a234-64736c537a5e@openai"
+    },
+    {
+      "name": "国庆节",
+      "start": "2027-10-01",
+      "end": "2027-10-07",
+      "uid": "e8a77f12-0969-5d1b-bfef-92741aa06873@openai"
+    }
+  ],
+  "workdays": [
+    {
+      "name": "春节",
+      "date": "2027-01-31",
+      "uid": "bc4aa134-b0f9-52e1-add5-ed9c3ec9b723@openai"
+    },
+    {
+      "name": "春节",
+      "date": "2027-02-14",
+      "uid": "91a1c0e2-aef3-57a0-8944-92abef5e2146@openai"
+    },
+    {
+      "name": "劳动节",
+      "date": "2027-05-08",
+      "uid": "128b4c40-2287-5c00-80f4-bf125f273e02@openai"
+    },
+    {
+      "name": "国庆节",
+      "date": "2027-09-26",
+      "uid": "5b02c04c-e3a4-5b27-8d02-2c6dfaf7a5ae@openai"
+    },
+    {
+      "name": "国庆节",
+      "date": "2027-10-09",
+      "uid": "03abf216-0673-5691-9677-a8edd3b892b0@openai"
+    }
+  ],
+  "created_at": "20261106T000000Z"
+}

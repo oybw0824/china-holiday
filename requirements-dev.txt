@@ -1,0 +1,2 @@
+# Independent RFC 5545 parser used by the tests; updater itself is stdlib-only.
+icalendar==6.3.1

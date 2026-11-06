@@ -52,14 +52,14 @@ jobs:
       - name: Commit validated update and check record
         id: commit
         run: |
-          if git diff --quiet -- holiday.ics; then
+          if git diff --quiet -- holiday.ics holidays.ics workdays.ics; then
             echo 'calendar_changed=false' >> "$GITHUB_OUTPUT"
           else
             echo 'calendar_changed=true' >> "$GITHUB_OUTPUT"
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add holiday.ics data/years data/sources data/check-status.json CHANGELOG.md CHECKS.md
+          git add holiday.ics holidays.ics workdays.ics data/years data/sources data/check-status.json CHANGELOG.md CHECKS.md
           if ! git diff --cached --quiet; then
             git commit -m 'chore: check official holiday notices and preserve calendar history'
             # A concurrent human push rejects safely; never force-push or overwrite it.
@@ -88,7 +88,7 @@ jobs:
       - name: Summarize maintenance
         if: always()
         run: |
-          echo '固定订阅路径：/china-holiday/holiday.ics' >> "$GITHUB_STEP_SUMMARY"
+          echo '固定订阅：合并 holiday.ics；放假 holidays.ics；补班 workdays.ics。' >> "$GITHUB_STEP_SUMMARY"
           echo '日历更新只有在正式原文、年度数据和 ICS 校验全部通过后才提交。' >> "$GITHUB_STEP_SUMMARY"
           if [ -f data/check-status.json ]; then
             cat data/check-status.json >> "$GITHUB_STEP_SUMMARY"

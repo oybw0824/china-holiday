@@ -69,7 +69,17 @@ jobs:
       - name: Request branch-based Pages build
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds" --silent
+        run: |
+          for attempt in 1 2 3 4; do
+            if gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds" --silent; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 4 ]; then
+              sleep "$((attempt * 5))"
+            fi
+          done
+          echo 'GitHub Pages build request failed after four attempts.' >&2
+          exit 1
       - name: Verify public HTTPS calendar after deployment
         env:
           GH_TOKEN: ${{ github.token }}
